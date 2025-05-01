@@ -95,22 +95,34 @@ const orderSchema = new mongoose.Schema({
     type: String,
     required: true,
     default: 'Processing',
-    enum: {
-      values: ['Processing', 'Shipped', 'Delivered', 'Cancelled'],
-      message: 'Please select correct status for order',
+    enum: ['Processing', 'Shipped', 'Delivered', 'Cancelled'],
+  },
+  trackingInfo: {
+    carrier: {
+      type: String,
+      enum: ['FedEx', 'UPS', 'USPS', 'DHL', 'Other'],
+      default: 'Other',
     },
+    trackingNumber: String,
+    trackingUrl: String,
+    status: {
+      type: String,
+      enum: ['label_created', 'in_transit', 'out_for_delivery', 'delivered', 'exception'],
+      default: 'label_created',
+    },
+    events: [
+      {
+        description: String,
+        location: String,
+        timestamp: Date,
+        status: String,
+      },
+    ],
+    estimatedDelivery: Date,
+    lastUpdated: Date,
   },
-  deliveredAt: Date,
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now,
-  },
-}, {
-  timestamps: true,
-});
+}, { timestamps: true });
+
+module.exports = mongoose.model('Order', orderSchema);
 
 module.exports = mongoose.model('Order', orderSchema);

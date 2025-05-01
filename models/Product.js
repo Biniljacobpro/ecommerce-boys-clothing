@@ -56,6 +56,15 @@ const productSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  wishlistCount: {
+    type: Number,
+    default: 0,
+  },
+  comparisonCount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
   reviews: [
     {
       user: {
@@ -95,5 +104,36 @@ const productSchema = new mongoose.Schema({
 }, {
   timestamps: true,
 });
+
+// Clean up wishlist items when product is removed
+productSchema.pre('remove', async function(next) {
+  try {
+    const Wishlist = mongoose.model('Wishlist');
+    await Wishlist.updateMany(
+      { 'items.product': this._id },
+      { $pull: { items: { product: this._id } } }
+    );
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Update wishlistCount when product is added/removed from wishlists
+productSchema.methods.updateWishlistCount = async function() {
+  const Wishlist = mongoose.model('Wishlist');
+  const count = await Wishlist.countDocuments({ 'items.product': this._id });
+  this.wishlistCount = count;
+  await this.save();
+};
+
+// method to increment comparison count
+productSchema.methods.incrementComparisonCount = async function() {
+  if (typeof this.comparisonCount !== 'number' || isNaN(this.comparisonCount)) {
+    this.comparisonCount = 0;
+  }
+  this.comparisonCount += 1;
+  await this.save();
+};
 
 module.exports = mongoose.model('Product', productSchema);

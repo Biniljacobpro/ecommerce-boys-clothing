@@ -20,45 +20,34 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     taxPrice,
     shippingPrice,
     totalPrice,
+    trackingInfo = {} // Default empty object if tracking info is not provided
   } = req.body;
 
-  // Validate important fields
+  // Validate required fields
   if (
-    !shippingInfo ||
-    !shippingInfo.address ||
-    !shippingInfo.city ||
-    !shippingInfo.state ||
-    !shippingInfo.country ||
-    !shippingInfo.pinCode ||
-    !shippingInfo.phoneNo
+    !shippingInfo?.address ||
+    !shippingInfo?.city ||
+    !shippingInfo?.state ||
+    !shippingInfo?.country ||
+    !shippingInfo?.pinCode ||
+    !shippingInfo?.phoneNo
   ) {
     return next(new ErrorResponse('Please provide complete shipping information', 400));
   }
 
-  if (
-    !paymentInfo ||
-    !paymentInfo.id ||
-    !paymentInfo.status
-  ) {
+  if (!paymentInfo?.id || !paymentInfo?.status) {
     return next(new ErrorResponse('Please provide complete payment information', 400));
   }
 
-  if (
-    itemsPrice == null || taxPrice == null || shippingPrice == null || totalPrice == null
-  ) {
-    return next(new ErrorResponse('Please provide all price-related fields', 400));
-  }
-
-  if (typeof itemsPrice !== 'number' || typeof taxPrice !== 'number' ||
-      typeof shippingPrice !== 'number' || typeof totalPrice !== 'number') {
-    return next(new ErrorResponse('Price fields must be numbers', 400));
+  if ([itemsPrice, taxPrice, shippingPrice, totalPrice].some(price => price == null || typeof price !== 'number')) {
+    return next(new ErrorResponse('Please provide valid numerical values for price fields', 400));
   }
 
   if (taxPrice > 100) {
     return next(new ErrorResponse('Tax price cannot be more than 100', 400));
   }
 
-  // Get user's cart
+  // Fetch user's cart details
   const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
 
   if (!cart || cart.items.length === 0) {
@@ -79,7 +68,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     };
   });
 
-  // Create the order
+  // Create the order with tracking info
   const order = await Order.create({
     user: req.user.id,
     orderItems,
@@ -89,14 +78,19 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
     taxPrice,
     shippingPrice,
     totalPrice,
+    trackingInfo: {
+      ...trackingInfo,
+      status: trackingInfo.status || 'label_created', // Default tracking status
+      lastUpdated: Date.now()
+    }
   });
 
-  // Update product stock
+  // Update stock based on purchased items
   for (const item of order.orderItems) {
     await updateStock(item.product, item.quantity);
   }
 
-  // Clear user's cart
+  // Clear user's cart post-purchase
   await Cart.findOneAndUpdate(
     { user: req.user.id },
     { items: [], totalPrice: 0 },
@@ -445,6 +439,116 @@ exports.generateOrderPdf = asyncHandler(async (req, res, next) => {
 });
 
 
+// @desc    Get order tracking info
+// @route   GET /api/v1/orders/:id/tracking
+// @access  Private
+exports.getOrderTracking = asyncHandler(async (req, res, next) => {
+  const order = await Order.findOne({
+    _id: req.params.id,
+    user: req.user.id
+  }).select('trackingInfo orderStatus');
+
+  if (!order) {
+    return next(new ErrorResponse('Order not found', 404));
+  }
+
+  // If no tracking info, return basic order status
+  if (!order.trackingInfo || !order.trackingInfo.trackingNumber) {
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: order.orderStatus,
+        message: 'Tracking information not yet available'
+      }
+    });
+  }
+
+  // Optional: Fetch real-time updates from carrier API
+  // You would implement this based on your shipping provider
+  // const realTimeUpdates = await fetchCarrierUpdates(order.trackingInfo.trackingNumber);
+  
+  res.status(200).json({
+    success: true,
+    data: order.trackingInfo
+  });
+});
+
+// @desc    Handle shipping webhook updates
+// @route   POST /api/v1/orders/webhook/shipping
+// @access  Public (protected by webhook secret)
+exports.handleShippingWebhook = asyncHandler(async (req, res, next) => {
+  // Verify webhook secret (important for security)
+  const webhookSecret = req.headers['x-webhook-secret'];
+  if (webhookSecret !== process.env.SHIPPING_WEBHOOK_SECRET) {
+    return next(new ErrorResponse('Unauthorized', 401));
+  }
+
+  const { trackingNumber, status, events, estimatedDelivery, carrier } = req.body;
+
+  // Find order by tracking number
+  const order = await Order.findOneAndUpdate(
+    { 'trackingInfo.trackingNumber': trackingNumber },
+    {
+      $set: {
+        'trackingInfo.status': status,
+        'trackingInfo.events': events,
+        'trackingInfo.estimatedDelivery': estimatedDelivery,
+        'trackingInfo.lastUpdated': Date.now(),
+        'orderStatus': mapTrackingStatusToOrderStatus(status)
+      }
+    },
+    { new: true }
+  );
+
+  if (!order) {
+    return next(new ErrorResponse('Order not found', 404));
+  }
+
+  // Send notification to user if status changed significantly
+  if (['out_for_delivery', 'delivered', 'exception'].includes(status)) {
+    await sendShippingUpdateNotification(order.user, status);
+  }
+
+  res.status(200).json({ success: true });
+});
+
+// Helper function to map carrier status to your order status
+function mapTrackingStatusToOrderStatus(trackingStatus) {
+  const statusMap = {
+    label_created: 'Processing',
+    in_transit: 'Shipped',
+    out_for_delivery: 'Shipped',
+    delivered: 'Delivered',
+    exception: 'Cancelled'
+  };
+  return statusMap[trackingStatus] || 'Processing';
+}
+
+// Helper function to send notifications
+async function sendShippingUpdateNotification(userId, status) {
+  const user = await User.findById(userId);
+  if (!user) return;
+
+  const statusMessages = {
+    out_for_delivery: 'Your order is out for delivery!',
+    delivered: 'Your order has been delivered!',
+    exception: 'There was an issue with your delivery'
+  };
+
+  const message = statusMessages[status] || 'Your order status has been updated';
+
+  try {
+    await sendEmail({
+      email: user.email,
+      subject: 'Order Status Update',
+      message
+    });
+    
+    // Could also implement SMS or push notifications here
+  } catch (error) {
+    console.error('Error sending shipping notification:', error);
+  }
+}
 
 
 // Helper function to restore product stock

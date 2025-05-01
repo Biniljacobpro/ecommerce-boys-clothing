@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Product = require('../models/Product');
 const ErrorResponse = require('../utils/errorResponse');
 const asyncHandler = require('../middlewares/async');
@@ -159,3 +160,150 @@ exports.deleteReview = asyncHandler(async (req, res, next) => {
     data: {},
   });
 });
+
+
+// @desc    Compare multiple products
+// @route   POST /api/v1/products/compare
+// @access  Public
+exports.compareProducts = asyncHandler(async (req, res, next) => {
+  const { productIds } = req.body;
+
+  // Validate input exists and is array
+  if (!productIds || !Array.isArray(productIds)) {
+    return next(new ErrorResponse('Please provide an array of product IDs', 400));
+  }
+
+  // Validate array length
+  if (productIds.length < 2) {
+    return next(new ErrorResponse('Please provide at least 2 product IDs to compare', 400));
+  }
+  if (productIds.length > 5) {
+    return next(new ErrorResponse('Cannot compare more than 5 products at once', 400));
+  }
+
+  // Validate each ID is a proper MongoDB ObjectID
+  const invalidIds = productIds.filter(id => !mongoose.Types.ObjectId.isValid(id));
+  if (invalidIds.length > 0) {
+    return next(new ErrorResponse(`Invalid product IDs: ${invalidIds.join(', ')}`, 400));
+  }
+
+  // Convert strings to ObjectIDs
+  const objectIds = productIds.map(id => new mongoose.Types.ObjectId(id));
+
+  // Fetch all products
+  const products = await Product.find({
+    _id: { $in: objectIds }
+  }).select('name description price discountPrice color size ratings images category stock numOfReviews wishlistCount');
+
+  if (products.length < 2) {
+    return next(new ErrorResponse('Could not find enough products to compare', 404));
+  }
+
+  // Create comparison matrix
+  const comparison = createComparisonMatrix(products);
+
+  res.status(200).json({
+    success: true,
+    count: products.length,
+    data: comparison
+  });
+});
+
+// Helper function to create comparison matrix
+function createComparisonMatrix(products) {
+  // Define which fields to compare and how to display them
+  const comparisonFields = [
+    {
+      name: 'Name',
+      key: 'name',
+      type: 'text'
+    },
+    {
+      name: 'Description',
+      key: 'description',
+      type: 'text'
+    },
+    {
+      name: 'Price',
+      key: 'price',
+      type: 'currency'
+    },
+    {
+      name: 'Discount Price',
+      key: 'discountPrice',
+      type: 'currency'
+    },
+    {
+      name: 'Color',
+      key: 'color',
+      type: 'text'
+    },
+    {
+      name: 'Available Sizes',
+      key: 'size',
+      type: 'array'
+    },
+    {
+      name: 'Rating',
+      key: 'ratings',
+      type: 'rating'
+    },
+    {
+      name: 'Category',
+      key: 'category',
+      type: 'text'
+    },
+    {
+      name: 'In Stock',
+      key: 'stock',
+      type: 'number'
+    },
+    {
+      name: 'Number of Reviews',
+      key: 'numOfReviews',
+      type: 'number'
+    },
+    {
+      name: 'Wishlist Count',
+      key: 'wishlistCount',
+      type: 'number'
+    }
+  ];
+
+  // Build the comparison matrix
+  const matrix = comparisonFields.map(field => {
+    const row = {
+      field: field.name,
+      type: field.type,
+      values: {}
+    };
+
+    products.forEach(product => {
+      row.values[product._id] = product[field.key];
+      
+      // Special formatting for certain field types
+      if (field.type === 'currency' && product[field.key]) {
+        row.values[product._id] = `$${product[field.key].toFixed(2)}`;
+      } else if (field.type === 'array') {
+        row.values[product._id] = product[field.key].join(', ');
+      } else if (field.type === 'rating') {
+        row.values[product._id] = `${product[field.key]} ★`;
+      }
+    });
+
+    return row;
+  });
+
+  // Add product headers
+  const productHeaders = products.map(product => ({
+    id: product._id,
+    name: product.name,
+    image: product.images[0]?.url || null,
+    price: product.discountPrice || product.price
+  }));
+
+  return {
+    fields: matrix,
+    products: productHeaders
+  };
+}
