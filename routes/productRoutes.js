@@ -5,6 +5,7 @@ const {
   getProduct,
   createProductReview,
   getProductReviews,
+  updateProductReview,
   deleteReview,
   compareProducts
 } = require('../controllers/productController');
@@ -16,6 +17,7 @@ router.get('/', advancedResults(Product), getProducts);
 router.get('/:id', getProduct);
 router.post('/:id/reviews', protect, createProductReview);
 router.get('/:id/reviews', getProductReviews);
+router.put('/:productId/reviews/:reviewId', protect, updateProductReview);
 router.post('/compare', compareProducts);
 router.delete('/:productId/reviews/:reviewId', protect, deleteReview);
 

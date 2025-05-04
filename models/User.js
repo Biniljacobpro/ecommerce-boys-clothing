@@ -43,13 +43,27 @@ const userSchema = new mongoose.Schema({
       message: props => `${props.value} is not a valid phone number!`
     }
   },
-  address: {
-    street: String,
-    city: String,
-    state: String,
-    zip: String,
-    country: String,
-  },
+  addresses: [{
+    type: {
+      street: String,
+      city: String,
+      state: String,
+      zip: String,
+      country: String,
+      phone: String,
+      isDefault: {
+        type: Boolean,
+        default: false
+      },
+      addressType: {
+        type: String,
+        enum: ['home', 'work','office','other'],
+        default: 'home'
+      },
+      tag: String // e.g., "Home", "Office", etc.
+    },
+    required: false
+  }],
   role: {
     type: String,
     enum: ['user', 'admin'],

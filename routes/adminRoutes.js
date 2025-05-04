@@ -14,6 +14,7 @@ const {
   getOrder,
   updateOrder,
   deleteOrder,
+  deleteReviewAsAdmin,
   getDashboardStats,
   generateUsersPdf,
   generateProductsPdf,
@@ -44,6 +45,7 @@ router.get('/products', advancedResults(Product), getProducts);
 router.post('/products', createProduct);
 router.put('/products/:id', updateProduct);
 router.delete('/products/:id', deleteProduct);
+router.delete('/products/:productId/reviews/:reviewId', deleteReviewAsAdmin);
 router.get('/products-list/pdf', generateProductsPdf);
 
 // Order routes

@@ -11,6 +11,10 @@ const path = require('path');
 // @route   GET /api/v1/admin/users
 // @access  Private/Admin
 exports.getUsers = asyncHandler(async (req, res, next) => {
+  // Add role filter to the advancedResults query
+  res.advancedResults.query.role = 'user';
+  
+  // Return the filtered results
   res.status(200).json(res.advancedResults);
 });
 
@@ -322,8 +326,14 @@ async function createPdfWithHeader(res, filename, title) {
 // @access  Private/Admin
 exports.generateUsersPdf = asyncHandler(async (req, res, next) => {
   try {
-    const users = await User.find().select('name email role createdAt');
-    const doc = await createPdfWithHeader(res, 'users-list', 'Users List');
+    // Only fetch users with role 'user'
+    const users = await User.find({ role: 'user' }).select('name email role createdAt');
+    
+    if (users.length === 0) {
+      return next(new ErrorResponse('No regular users found', 404));
+    }
+
+    const doc = await createPdfWithHeader(res, 'users-list', 'Regular Users List');
     
     // Set up table parameters
     const table = {
@@ -506,6 +516,44 @@ function drawTable(doc, table) {
   doc.y = y + 15;
 }
 
+// controllers/adminController.js
+
+// @desc    Delete review as admin
+// @route   DELETE /api/v1/admin/products/:productId/reviews/:reviewId
+// @access  Private/Admin
+exports.deleteReviewAsAdmin = asyncHandler(async (req, res, next) => {
+  const { productId, reviewId } = req.params;
+
+  const product = await Product.findById(productId);
+
+  if (!product) {
+    return next(new ErrorResponse(`Product not found with id of ${productId}`, 404));
+  }
+
+  const reviewIndex = product.reviews.findIndex(
+    r => r._id.toString() === reviewId.toString()
+  );
+
+  if (reviewIndex === -1) {
+    return next(new ErrorResponse(`Review not found with id of ${reviewId}`, 404));
+  }
+
+  // Admin can delete any review without ownership check
+  product.reviews.splice(reviewIndex, 1);
+  product.numOfReviews = product.reviews.length;
+
+  // Recalculate average rating if there are remaining reviews
+  product.ratings = product.reviews.length > 0 
+    ? product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length
+    : 0;
+
+  await product.save({ validateBeforeSave: false });
+
+  res.status(200).json({
+    success: true,
+    data: product
+  });
+});
 
 // @desc Generate PDF report of product sales with charts
 // @route GET /api/v1/admin/sales-report/pdf

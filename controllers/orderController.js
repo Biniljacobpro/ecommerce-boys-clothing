@@ -13,74 +13,133 @@ const fs = require('fs');
 // @route   POST /api/v1/orders
 // @access  Private
 exports.createOrder = asyncHandler(async (req, res, next) => {
-  const {
-    shippingInfo,
-    paymentInfo,
-    itemsPrice,
-    taxPrice,
-    shippingPrice,
-    totalPrice,
-    trackingInfo = {} // Default empty object if tracking info is not provided
-  } = req.body;
+  const { paymentInfo, trackingInfo = {}, useSavedAddress, addressId, newAddress } = req.body;
 
-  // Validate required fields
-  if (
-    !shippingInfo?.address ||
-    !shippingInfo?.city ||
-    !shippingInfo?.state ||
-    !shippingInfo?.country ||
-    !shippingInfo?.pinCode ||
-    !shippingInfo?.phoneNo
-  ) {
+  // Get user with addresses
+  const user = await User.findById(req.user.id).select('addresses');
+
+  let shippingInfo;
+
+  // Handle address selection
+  if (useSavedAddress) {
+    const selectedAddress = user.addresses.id(addressId);
+    if (!selectedAddress) {
+      return next(new ErrorResponse('Selected address not found', 404));
+    }
+    shippingInfo = {
+      address: selectedAddress.street,
+      city: selectedAddress.city,
+      state: selectedAddress.state,
+      country: selectedAddress.country,
+      pinCode: selectedAddress.zip,
+      phoneNo: selectedAddress.phone
+    };
+  } else if (newAddress) {
+    const { street, city, state, zip, country, phone, saveAddress } = newAddress;
+    if (!street || !city || !state || !zip || !country || !phone) {
+      return next(new ErrorResponse('Please provide complete shipping information', 400));
+    }
+    shippingInfo = {
+      address: street,
+      city,
+      state,
+      country,
+      pinCode: zip,
+      phoneNo: phone
+    };
+    if (saveAddress) {
+      const address = {
+        street,
+        city,
+        state,
+        zip,
+        country,
+        phone,
+        addressType: newAddress.addressType || 'other',
+        tag: newAddress.tag || 'New Address'
+      };
+      user.addresses.push(address);
+      await user.save();
+    }
+  } else {
+    const defaultAddress = user.addresses.find(addr => addr.isDefault);
+    if (!defaultAddress) {
+      return next(new ErrorResponse('No shipping address provided and no default address set', 400));
+    }
+    shippingInfo = {
+      address: defaultAddress.street,
+      city: defaultAddress.city,
+      state: defaultAddress.state,
+      country: defaultAddress.country,
+      pinCode: defaultAddress.zip,
+      phoneNo: defaultAddress.phone
+    };
+  }
+  // Validate shipping info
+  const requiredShippingFields = ['address', 'city', 'state', 'country', 'pinCode', 'phoneNo'];
+  if (requiredShippingFields.some(field => !shippingInfo?.[field])) {
     return next(new ErrorResponse('Please provide complete shipping information', 400));
   }
 
+  // Validate payment info
   if (!paymentInfo?.id || !paymentInfo?.status) {
     return next(new ErrorResponse('Please provide complete payment information', 400));
   }
 
-  if ([itemsPrice, taxPrice, shippingPrice, totalPrice].some(price => price == null || typeof price !== 'number')) {
-    return next(new ErrorResponse('Please provide valid numerical values for price fields', 400));
-  }
-
-  if (taxPrice > 100) {
-    return next(new ErrorResponse('Tax price cannot be more than 100', 400));
-  }
-
-  // Fetch user's cart details
+  // Get user's cart with products
   const cart = await Cart.findOne({ user: req.user.id }).populate('items.product');
-
   if (!cart || cart.items.length === 0) {
     return next(new ErrorResponse('No items in cart', 400));
   }
 
-  // Prepare order items from cart
-  const orderItems = cart.items.map((item) => {
+  // Validate all products exist and have stock
+  for (const item of cart.items) {
     if (!item.product) {
-      throw new ErrorResponse('Cart contains invalid product reference', 400);
+      return next(new ErrorResponse(`Product ${item.product?._id} not found`, 404));
     }
-    return {
-      product: item.product._id,
-      quantity: item.quantity,
-      size: item.size,
-      color: item.color,
-      price: item.price,
-    };
-  });
+    if (item.product.stock < item.quantity) {
+      return next(new ErrorResponse(
+        `Not enough stock for ${item.product.name}. Only ${item.product.stock} available`,
+        400
+      ));
+    }
+  }
 
-  // Create the order with tracking info
+  // Calculate prices server-side (prevent frontend manipulation)
+  const itemsPrice = cart.items.reduce(
+    (sum, item) => sum + (item.price * item.quantity), 
+    0
+  );
+  const taxPrice = itemsPrice * 0.1; // Example: 10% tax
+  const shippingPrice = 5.99; // Fixed shipping or calculate based on rules
+  const totalPrice = itemsPrice + taxPrice + shippingPrice;
+
+  // Create order items from cart
+  const orderItems = cart.items.map(item => ({
+    product: item.product._id,
+    quantity: item.quantity,
+    size: item.size,
+    color: item.color,
+    price: item.price
+  }));
+
+  // Create order
   const order = await Order.create({
     user: req.user.id,
     orderItems,
     shippingInfo,
-    paymentInfo,
+    paymentInfo: {
+      id: paymentInfo.id,
+      status: paymentInfo.status,
+      method: paymentInfo.method || 'card'
+    },
     itemsPrice,
     taxPrice,
     shippingPrice,
     totalPrice,
     trackingInfo: {
       ...trackingInfo,
-      status: trackingInfo.status || 'label_created', // Default tracking status
+      status: trackingInfo.status || 'label_created',
       lastUpdated: Date.now()
     }
   });
@@ -98,15 +157,145 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
   );
 
   // Send order confirmation email
-  try {
-    await sendEmail({
-      email: req.user.email,
-      subject: 'Your Order Confirmation',
-      message: `Thank you for your order! Your order ID is ${order._id}.`,
-    });
-  } catch (error) {
-    console.error('Error sending order confirmation email:', error);
-  }
+
+try {
+  // Get populated order details for email
+  const populatedOrder = await Order.findById(order._id)
+    .populate('user', 'name email')
+    .populate('orderItems.product', 'name images');
+
+  // Format order items for email
+  const orderItemsList = populatedOrder.orderItems.map(item => `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #eee;">
+        <img src="${item.product.images[0]?.url || 'https://via.placeholder.com/50'}" 
+             alt="${item.product.name}" 
+             style="width: 50px; height: 50px; object-fit: cover; margin-right: 10px;">
+        ${item.product.name}
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: center;">
+        ${item.quantity}
+      </td>
+      <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">
+        $${(item.price * item.quantity).toFixed(2)}
+      </td>
+    </tr>
+  `).join('');
+
+  await sendEmail({
+    email: populatedOrder.user.email,
+    subject: `Your DressUp Order Confirmation #${order._id}`,
+    message: `
+      Dear ${populatedOrder.user.name},
+
+      Thank you for your order with DressUp! We're excited to help elevate your style.
+
+      Order Summary:
+      - Order Number: ${order._id}
+      - Date: ${new Date(order.createdAt).toLocaleDateString()}
+      - Total Amount: $${order.totalPrice.toFixed(2)}
+
+      Shipping Address:
+      ${order.shippingInfo.address}
+      ${order.shippingInfo.city}, ${order.shippingInfo.state} ${order.shippingInfo.pinCode}
+      ${order.shippingInfo.country}
+      Phone: ${order.shippingInfo.phoneNo}
+
+      You can track your order status by visiting your account dashboard.
+
+      If you have any questions, please contact our support team.
+
+      Warm regards,
+      The DressUp Team
+    `,
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; color: #333;">
+        <div style="background-color: #2c3e50; padding: 20px; color: white;">
+          <h1 style="margin: 0;">Thank You For Your Order!</h1>
+        </div>
+
+        <div style="padding: 20px;">
+          <p>Dear ${populatedOrder.user.name},</p>
+          <p>Thank you for shopping with DressUp! We're excited to help elevate your style with your new purchase.</p>
+
+          <h2 style="color: #2c3e50; margin-top: 30px;">Order Details</h2>
+          <p><strong>Order Number:</strong> ${order._id}</p>
+          <p><strong>Order Date:</strong> ${new Date(order.createdAt).toLocaleDateString()}</p>
+
+          <h3 style="color: #2c3e50; margin-top: 20px;">Items Ordered</h3>
+          <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
+            <thead>
+              <tr style="background-color: #f5f5f5;">
+                <th style="padding: 10px; text-align: left;">Product</th>
+                <th style="padding: 10px; text-align: center;">Qty</th>
+                <th style="padding: 10px; text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${orderItemsList}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2" style="padding: 10px; text-align: right; font-weight: bold;">Subtotal:</td>
+                <td style="padding: 10px; text-align: right;">$${order.itemsPrice.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding: 10px; text-align: right; font-weight: bold;">Shipping:</td>
+                <td style="padding: 10px; text-align: right;">$${order.shippingPrice.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding: 10px; text-align: right; font-weight: bold;">Tax:</td>
+                <td style="padding: 10px; text-align: right;">$${order.taxPrice.toFixed(2)}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding: 10px; text-align: right; font-weight: bold;">Total:</td>
+                <td style="padding: 10px; text-align: right; font-weight: bold;">$${order.totalPrice.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+
+          <h3 style="color: #2c3e50; margin-top: 20px;">Shipping Information</h3>
+          <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">
+            <p>${order.shippingInfo.address}</p>
+            <p>${order.shippingInfo.city}, ${order.shippingInfo.state} ${order.shippingInfo.pinCode}</p>
+            <p>${order.shippingInfo.country}</p>
+            <p>Phone: ${order.shippingInfo.phoneNo}</p>
+          </div>
+
+          ${order.trackingInfo?.trackingNumber ? `
+            <h3 style="color: #2c3e50; margin-top: 20px;">Tracking Information</h3>
+            <p>Your order is being processed and will be shipped soon.</p>
+            <p><strong>Tracking Number:</strong> ${order.trackingInfo.trackingNumber}</p>
+            <p><a href="${order.trackingInfo.trackingUrl || '#'}" 
+                 style="color: #2c3e50; text-decoration: underline;">
+                 Track Your Order
+               </a></p>
+          ` : ''}
+
+          <div style="margin-top: 30px; text-align: center;">
+            <a href="${process.env.FRONTEND_URL || 'https://yourstore.com'}/account/orders" 
+               style="background-color: #2c3e50; color: white; padding: 10px 20px; 
+                      text-decoration: none; border-radius: 5px; display: inline-block;">
+              View Your Order
+            </a>
+          </div>
+
+          <p style="margin-top: 30px;">If you have any questions about your order, please reply to this email.</p>
+
+          <p>Warm regards,<br>The DressUp Team</p>
+        </div>
+
+        <div style="background-color: #f5f5f5; padding: 15px; text-align: center; font-size: 12px; color: #777;">
+          <p>DressUp - Elevate Your Style</p>
+          <p>${process.env.FRONTEND_URL || 'https://yourstore.com'}</p>
+        </div>
+      </div>
+    `
+  });
+} catch (error) {
+  console.error('Order confirmation email failed:', error);
+  // Don't fail the order if email fails
+}
 
   res.status(201).json({
     success: true,

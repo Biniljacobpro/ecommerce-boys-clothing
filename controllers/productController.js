@@ -117,47 +117,97 @@ exports.getProductReviews = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Delete review
-// @route   DELETE /api/v1/reviews/:id
+// @desc    Update product review
+// @route   PUT /api/v1/products/:productId/reviews/:reviewId
 // @access  Private
-exports.deleteReview = asyncHandler(async (req, res, next) => {
-  const product = await Product.findById(req.params.productId); // Changed from query to params
+exports.updateProductReview = asyncHandler(async (req, res, next) => {
+  const { rating, comment } = req.body;
+  const { productId, reviewId } = req.params;
+
+  const product = await Product.findById(productId);
 
   if (!product) {
-    return next(
-      new ErrorResponse(`Product not found with id of ${req.params.productId}`, 404)
-    );
+    return next(new ErrorResponse(`Product not found with id of ${productId}`, 404));
   }
 
-  // Filter out the review to remove
-  const reviews = product.reviews.filter(
-    (review) => review._id.toString() !== req.params.reviewId.toString()
+  // Find the review
+  const review = product.reviews.find(
+    r => r._id.toString() === reviewId.toString()
   );
 
-  const numOfReviews = reviews.length;
+  if (!review) {
+    return next(new ErrorResponse(`Review not found with id of ${reviewId}`, 404));
+  }
 
-  // Calculate average rating
-  const ratings =
-    numOfReviews === 0
-      ? 0
-      : reviews.reduce((acc, item) => item.rating + acc, 0) / numOfReviews;
+  // Verify user is the review owner or admin
+  if (review.user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse('Not authorized to update this review', 403));
+  }
 
-  await Product.findByIdAndUpdate(
-    req.query.productId,
-    {
-      reviews,
-      ratings,
-      numOfReviews,
-    },
-    {
-      new: true,
-      runValidators: true,
-    }
-  );
+  // Validate rating and comment
+  if (rating && (rating < 1 || rating > 5)) {
+    return next(new ErrorResponse('Rating must be between 1 and 5', 400));
+  }
+
+  if (comment && comment.length > 250) {
+    return next(new ErrorResponse('Comment must not exceed 250 characters', 400));
+  }
+
+  // Update review fields
+  if (rating) review.rating = Number(rating);
+  if (comment) review.comment = comment;
+
+  // Recalculate average rating
+  product.ratings = product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length;
+
+  await product.save({ validateBeforeSave: false });
 
   res.status(200).json({
     success: true,
-    data: {},
+    data: product
+  });
+});
+
+// @desc    Delete product review
+// @route   DELETE /api/v1/products/:productId/reviews/:reviewId
+// @access  Private/Admin
+exports.deleteReview = asyncHandler(async (req, res, next) => {
+  const { productId, reviewId } = req.params;
+
+  const product = await Product.findById(productId);
+
+  if (!product) {
+    return next(new ErrorResponse(`Product not found with id of ${productId}`, 404));
+  }
+
+  // Find the review
+  const reviewIndex = product.reviews.findIndex(
+    r => r._id.toString() === reviewId.toString()
+  );
+
+  if (reviewIndex === -1) {
+    return next(new ErrorResponse(`Review not found with id of ${reviewId}`, 404));
+  }
+
+  // Verify user is the review owner or admin
+  if (product.reviews[reviewIndex].user.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse('Not authorized to delete this review', 403));
+  }
+
+  // Remove the review
+  product.reviews.splice(reviewIndex, 1);
+  product.numOfReviews = product.reviews.length;
+
+  // Recalculate average rating if there are remaining reviews
+  product.ratings = product.reviews.length > 0 
+    ? product.reviews.reduce((acc, item) => item.rating + acc, 0) / product.reviews.length
+    : 0;
+
+  await product.save({ validateBeforeSave: false });
+
+  res.status(200).json({
+    success: true,
+    data: product
   });
 });
 
