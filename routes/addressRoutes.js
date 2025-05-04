@@ -5,7 +5,8 @@ const {
   getAddresses,
   updateAddress,
   deleteAddress,
-  setDefaultAddress
+  setDefaultAddress,
+  getAddressCount
 } = require('../controllers/addressController');
 const { protect } = require('../middlewares/authMiddleware');
 
@@ -19,6 +20,10 @@ router.route('/:id')
   .put(updateAddress)
   .delete(deleteAddress);
 
+
+router.get('/count', getAddressCount);
 router.put('/:id/set-default', setDefaultAddress);
+
+
 
 module.exports = router;

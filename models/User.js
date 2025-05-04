@@ -57,10 +57,16 @@ const userSchema = new mongoose.Schema({
       },
       addressType: {
         type: String,
-        enum: ['home', 'work','office','other'],
+        enum: ['home', 'work','other'],
         default: 'home'
       },
-      tag: String // e.g., "Home", "Office", etc.
+      tag: String // e.g., "Home", "work", etc.
+    },
+    validate: {
+      validator: function(addresses) {
+        return addresses.length <= 4; // Maximum 4 addresses
+      },
+      message: 'Maximum of 4 saved addresses reached'
     },
     required: false
   }],

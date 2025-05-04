@@ -48,6 +48,17 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
       phoneNo: phone
     };
     if (saveAddress) {
+      // Check address limit before saving
+      if (user.addresses.length >= 4) {
+        return next(new ErrorResponse('Maximum of 4 saved addresses reached. Address not saved to profile.', 400));
+        // Or continue without saving but notify user:
+        // return res.status(200).json({
+        //   success: true,
+        //   message: 'Order created but address not saved (maximum limit reached)',
+        //   data: order
+        // });
+      }
+      
       const address = {
         street,
         city,
@@ -58,6 +69,7 @@ exports.createOrder = asyncHandler(async (req, res, next) => {
         addressType: newAddress.addressType || 'other',
         tag: newAddress.tag || 'New Address'
       };
+      
       user.addresses.push(address);
       await user.save();
     }

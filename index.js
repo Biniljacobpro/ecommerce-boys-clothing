@@ -27,6 +27,7 @@ const cartRoutes = require('./routes/cartRoutes');
 const orderRoutes = require('./routes/orderRoutes');
 const userRoutes = require('./routes/userRoutes');
 const wishlist = require('./routes/wishlistRoutes');
+const addressRoutes = require('./routes/addressRoutes');
 
 const app = express();
 
@@ -94,8 +95,8 @@ app.use(useragent.express());
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 10 * 60 * 1000, // 10 mins
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 10 mins
+  max: 1000,
 });
 app.use(limiter);
 
@@ -112,6 +113,7 @@ app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/wishlist', wishlist);
+app.use('/api/v1/addresses', addressRoutes)
 
 // Error handler middleware
 app.use(errorHandler);

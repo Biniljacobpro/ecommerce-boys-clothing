@@ -1,6 +1,6 @@
 // controllers/addressController.js
-const asyncHandler = require('express-async-handler');
-const User = require('../models/userModel');
+const asyncHandler = require('../middlewares/async');
+const User = require('../models/User');
 const ErrorResponse = require('../utils/errorResponse');
 
 // @desc    Get user addresses
@@ -14,39 +14,45 @@ exports.getAddresses = asyncHandler(async (req, res, next) => {
   });
 });
 
+
 // @desc    Add new address
 // @route   POST /api/addresses
 // @access  Private
 exports.addAddress = asyncHandler(async (req, res, next) => {
-  const { street, city, state, zip, country, phone, isDefault, addressType, tag } = req.body;
+    const { street, city, state, zip, country, phone, isDefault, addressType, tag } = req.body;
+    
+    const user = await User.findById(req.user.id);
+    
+    // Check address limit (4 max)
+    if (user.addresses.length >= 4) {
+      return next(new ErrorResponse('Maximum of 4 saved addresses reached. Please delete an existing address first.', 400));
+    }
   
-  const address = {
-    street,
-    city,
-    state,
-    zip,
-    country,
-    phone,
-    addressType,
-    tag
-  };
-
-  const user = await User.findById(req.user.id);
+    const address = {
+      street,
+      city,
+      state,
+      zip,
+      country,
+      phone,
+      addressType,
+      tag
+    };
   
-  // If this is the first address or is set as default, make it default
-  if (isDefault || user.addresses.length === 0) {
-    user.addresses.forEach(addr => { addr.isDefault = false; });
-    address.isDefault = true;
-  }
-
-  user.addresses.push(address);
-  await user.save();
-
-  res.status(201).json({
-    success: true,
-    data: address
+    // If this is the first address or is set as default, make it default
+    if (isDefault || user.addresses.length === 0) {
+      user.addresses.forEach(addr => { addr.isDefault = false; });
+      address.isDefault = true;
+    }
+  
+    user.addresses.push(address);
+    await user.save();
+  
+    res.status(201).json({
+      success: true,
+      data: address
+    });
   });
-});
 
 // @desc    Update address
 // @route   PUT /api/addresses/:id
@@ -127,5 +133,17 @@ exports.setDefaultAddress = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: address
+  });
+});
+
+// @desc    To count address
+// @route   PUT /api/addresses/count
+// @access  Private
+exports.getAddressCount = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.user.id).select('addresses');
+  res.status(200).json({
+    success: true,
+    count: user.addresses.length,
+    maxAllowed: 4
   });
 });
