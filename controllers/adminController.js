@@ -666,3 +666,149 @@ exports.generateSalesReportPdf = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Failed to generate sales report', 500));
   }
 });
+
+// @desc    Generate category-wise sales report PDF
+// @route   GET /api/v1/admin/sales-report/category/pdf
+// @access  Private/Admin
+exports.generateCategorySalesReportPdf = asyncHandler(async (req, res, next) => {
+  try {
+    // Get all delivered orders grouped by product category
+    const categoryStats = await Order.aggregate([
+      { $match: { orderStatus: 'Delivered' } }, // Only count delivered orders
+      { $unwind: '$orderItems' }, // Break down order items
+      {
+        $lookup: {
+          from: 'products', // Join with products collection
+          localField: 'orderItems.product',
+          foreignField: '_id',
+          as: 'productDetails'
+        }
+      },
+      { $unwind: '$productDetails' }, // Unwind the product details
+      {
+        $group: {
+          _id: '$productDetails.category', // Group by category
+          totalSales: { $sum: '$orderItems.price' }, // Sum of prices
+          totalItemsSold: { $sum: '$orderItems.quantity' }, // Sum of quantities
+          orderCount: { $sum: 1 } // Count of orders
+        }
+      },
+      {
+        $project: {
+          _id: 0,
+          category: '$_id',
+          totalSales: 1,
+          totalItemsSold: 1,
+          orderCount: 1
+        }
+      },
+      { $sort: { totalSales: -1 } } // Sort by highest sales first
+    ]);
+
+    if (categoryStats.length === 0) {
+      return next(new ErrorResponse('No sales data available', 404));
+    }
+
+    const doc = await createPdfWithHeader(res, 'category-sales-report', 'Category-wise Sales Report');
+    
+    // Add report period information
+    doc.fontSize(10)
+       .fillColor('#555555')
+       .text('Report Period: All Time', { align: 'left' })
+       .moveDown(0.5);
+
+    // Set up table parameters
+    const table = {
+      headers: ['Category', 'Orders', 'Items Sold', 'Total Sales'],
+      rows: [],
+      columnWidths: [150, 100, 100, 100],
+      columnAlignments: ['left', 'right', 'right', 'right']
+    };
+    
+    // Add data to table
+    categoryStats.forEach((stat, index) => {
+      table.rows.push([
+        stat.category.charAt(0).toUpperCase() + stat.category.slice(1), // Capitalize
+        stat.orderCount.toString(),
+        stat.totalItemsSold.toString(),
+        `$${stat.totalSales.toFixed(2)}`
+      ]);
+    });
+
+    // Calculate totals
+    const totals = {
+      orders: categoryStats.reduce((sum, stat) => sum + stat.orderCount, 0),
+      items: categoryStats.reduce((sum, stat) => sum + stat.totalItemsSold, 0),
+      sales: categoryStats.reduce((sum, stat) => sum + stat.totalSales, 0)
+    };
+
+    // Draw the table
+    drawTable(doc, table);
+
+    // Add summary section
+    doc.moveDown(1)
+       .font('Helvetica-Bold')
+       .fillColor('#2c3e50')
+       .text('Summary Statistics', { align: 'left' })
+       .moveDown(0.5);
+
+    doc.font('Helvetica')
+       .fillColor('#333333')
+       .text(`Total Categories: ${categoryStats.length}`, { align: 'left' })
+       .text(`Total Orders: ${totals.orders}`, { align: 'left' })
+       .text(`Total Items Sold: ${totals.items}`, { align: 'left' })
+       .text(`Total Revenue: $${totals.sales.toFixed(2)}`, { align: 'left' });
+
+    // Add chart-like visualization
+    doc.moveDown(1)
+       .font('Helvetica-Bold')
+       .text('Sales Distribution by Category', { align: 'left' })
+       .moveDown(0.5);
+
+    // Calculate max sales for scaling
+    const maxSales = Math.max(...categoryStats.map(stat => stat.totalSales));
+
+    // Draw bar chart
+    const chartLeft = 50;
+    const chartWidth = 495;
+    const chartHeight = 150;
+    const barHeight = 20;
+    const gap = 10;
+
+    let y = doc.y;
+    categoryStats.forEach((stat, i) => {
+      const barWidth = (stat.totalSales / maxSales) * chartWidth;
+      
+      // Draw bar
+      doc.rect(chartLeft, y, barWidth, barHeight)
+         .fill(i % 2 === 0 ? '#3498db' : '#2ecc71');
+      
+      // Add label
+      doc.fontSize(8)
+         .fillColor('#ffffff')
+         .text(
+           `${stat.category}: $${stat.totalSales.toFixed(2)}`, 
+           chartLeft + 5, 
+           y + 5,
+           { width: barWidth - 10 }
+         );
+      
+      y += barHeight + gap;
+    });
+
+    doc.y = y + 20;
+
+    // Add timestamp
+    doc.fontSize(8)
+       .fillColor('#888888')
+       .text(`Report generated on: ${new Date().toLocaleString()}`, {
+         align: 'right'
+       });
+
+    // Finalize the PDF
+    doc.end();
+  } catch (error) {
+    console.error("Error generating category sales PDF:", error);
+    return next(new ErrorResponse('Error generating category sales report', 500));
+  }
+});

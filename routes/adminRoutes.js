@@ -19,7 +19,8 @@ const {
   generateUsersPdf,
   generateProductsPdf,
   generateOrdersPdf,
-  generateSalesReportPdf
+  generateSalesReportPdf,
+  generateCategorySalesReportPdf
 } = require('../controllers/adminController');
 const { protect, authorize } = require('../middlewares/authMiddleware');
 const advancedResults = require('../middlewares/advancedResults');
@@ -47,6 +48,7 @@ router.put('/products/:id', updateProduct);
 router.delete('/products/:id', deleteProduct);
 router.delete('/products/:productId/reviews/:reviewId', deleteReviewAsAdmin);
 router.get('/products-list/pdf', generateProductsPdf);
+router.get('/sales-report/category/pdf', generateCategorySalesReportPdf);
 
 // Order routes
 router.get('/orders', advancedResults(Order), getOrders);
