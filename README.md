@@ -33,7 +33,7 @@ GET	       /api/v1/auth/logout	       Logout user
 
 # 🧍 Users
 
-Method	    Endpoint	                     Description
+
 
 GET	        /api/v1/users/me	             Get user profile
 
@@ -45,7 +45,7 @@ DELETE	    /api/v1/users/me	             Delete user account
 
 # 🧕 Addresses
 
-Method	    Endpoint	                        Description
+
 
 GET	        /api/v1/addresses	                Get all addresses
 
@@ -61,7 +61,7 @@ DELETE    	/api/v1/addresses/:id	            Delete address
 
 # 👕 Products
 
-Method	   Endpoint	                                      Description
+
 
 GET	       /api/v1/products	                              List all products
 
@@ -84,7 +84,7 @@ POST	     /api/v1/products/compare	                      Compare two products
 
 # 🛒 Cart
 
-Method	 Endpoint	             Description 
+
 
 GET	     /api/v1/cart	         Get user cart
 
@@ -98,7 +98,7 @@ DELETE	 /api/v1/cart	         Clear cart
 
 # ❤️ Wishlist
 
-Method	Endpoint	                            Description
+
 
 GET	    /api/v1/wishlist	                    Get wishlist
 
@@ -111,7 +111,7 @@ POST   	/api/v1/wishlist/:itemId/move-to-cart	Move item to cart
 
 # 📦 Orders
 
-Method	Endpoint	                       Description
+
 
 POST	  /api/v1/orders	                 Create order
  
@@ -132,7 +132,7 @@ POST	  /api/v1/orders/webhook/shipping	 Shipping webhook
 # 🛠 Admin Routes
 
 # 👥 Users
-Method	Endpoint	                    Description
+
 
 GET	    /api/v1/admin/users	          Get all users
 
@@ -148,7 +148,7 @@ GET   	/api/v1/admin/users-list/pdf	Export users to PDF
 
 # 🛍 Products
 
-Method	Endpoint	                                         Description
+
 
 GET   	/api/v1/admin/products	                           Admin: all products
 
@@ -164,7 +164,7 @@ GET   	/api/v1/admin/products-list/pdf	                  Export product list PDF
 
 # 📋 Orders
 
-Method	Endpoint	                              Description
+
 
 GET   	/api/v1/admin/orders	                  Admin: all orders
 
@@ -182,7 +182,7 @@ GET	    /api/v1/admin/sales-report/category/pdf	Sales by category PDF
 
 # 📊 Dashboard
 
-Method	Endpoint	                      Description 
+
 
 GET	    /api/v1/admin/dashboard-stats	  Get dashboard stats
 
@@ -230,6 +230,10 @@ Key dependencies used in the project:
 ✅ Email Notification System
 ✅ Sales Report with Charts in PDF*
 
+# 🎯 Conclusion
+DressUp is more than just an e-commerce platform — it's a complete, secure, and scalable solution tailored for modern online clothing businesses. With a robust backend powered by Node.js and MongoDB, and feature-rich functionalities for both users and admins, this project demonstrates best practices in RESTful API design, user experience, and admin control. Whether you're a developer exploring full-stack development or a business aiming to launch a specialized online store, DressUp provides a solid foundation to build on.
+
+Feel free to explore, contribute, or fork the project. Let's elevate e-commerce together!
 
 # 👨‍💻 Developer
 Name    : Binil Jacob
