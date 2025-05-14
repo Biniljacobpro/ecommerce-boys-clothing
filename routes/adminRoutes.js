@@ -8,6 +8,7 @@ const {
   deleteUser,
   getProducts,
   createProduct,
+  importProducts,
   updateProduct,
   deleteProduct,
   getOrders,
@@ -44,6 +45,7 @@ router.get('/users-list/pdf', generateUsersPdf);
 // Product routes
 router.get('/products', advancedResults(Product), getProducts);
 router.post('/products', createProduct);
+router.post('/products/import', importProducts);
 router.put('/products/:id', updateProduct);
 router.delete('/products/:id', deleteProduct);
 router.delete('/products/:productId/reviews/:reviewId', deleteReviewAsAdmin);

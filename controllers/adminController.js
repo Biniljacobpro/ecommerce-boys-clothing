@@ -80,6 +80,88 @@ exports.getProducts = asyncHandler(async (req, res, next) => {
 // @route   POST /api/v1/admin/products
 // @access  Private/Admin
 exports.createProduct = asyncHandler(async (req, res, next) => {
+  const { name, description, price, discountPrice, category, stock, size } = req.body;
+
+  // Validate required fields
+  if (!name || !description || !price || !category || !stock || !size) {
+    return next(new ErrorResponse('Please provide all required fields', 400));
+  }
+
+  // Validate product name length (3-100 characters)
+  if (name.length < 3 || name.length > 50) {
+    return next(new ErrorResponse('Product name must be between 3 and 50 characters', 400));
+  }
+
+  // Validate description length (20-2000 characters)
+  if (description.length < 10 || description.length > 200) {
+    return next(new ErrorResponse('Description must be between 20 and 200 characters', 400));
+  }
+
+  // Validate category
+  const validCategories = ['shirts', 'pants', 'shoes', 'accessories', 't-shirt'];
+  if (!validCategories.includes(category.toLowerCase())) {
+    return next(new ErrorResponse(`Invalid product category. Valid categories are: ${validCategories.join(', ')}`, 400));
+  }
+
+  // Validate stock (1-100)
+  if (stock < 1 || stock > 100) {
+    return next(new ErrorResponse('Stock must be between 1 and 100', 400));
+  }
+
+  // Validate price (0.01 to 999999.99)
+  if (price <= 0 || price > 99999.99) {
+    return next(new ErrorResponse('Price must be between 0.01 and 99,999.99', 400));
+  }
+
+  // Validate discount price if provided
+  if (discountPrice) {
+    if (discountPrice <= 0) {
+      return next(new ErrorResponse('Discount price must be greater than 0', 400));
+    }
+    if (discountPrice >= price) {
+      return next(new ErrorResponse('Discount price must be less than regular price', 400));
+    }
+  }
+
+  // Check for duplicate product name (case insensitive)
+  const existingProduct = await Product.findOne({ 
+    name: { $regex: new RegExp(`^${name}$`, 'i') } 
+  });
+
+  if (existingProduct) {
+    return next(new ErrorResponse(`Product with name '${name}' already exists`, 400));
+  }
+
+  // Validate size array (1-10 sizes, each 1-10 characters)
+  if (!Array.isArray(size) || size.length === 0 || size.length > 10) {
+    return next(new ErrorResponse('Please provide 1 to 10 sizes', 400));
+  }
+  
+  for (const s of size) {
+    if (typeof s !== 'string' || s.length < 1 || s.length > 10) {
+      return next(new ErrorResponse('Each size must be 1 to 10 characters', 400));
+    }
+  }
+
+  // Validate image array if provided (1-8 images)
+  if (req.body.images) {
+    if (!Array.isArray(req.body.images) || req.body.images.length === 0 || req.body.images.length > 8) {
+      return next(new ErrorResponse('Please provide 1 to 8 images', 400));
+    }
+    if (req.body.images.some(img => !img.public_id || !img.url)) {
+      return next(new ErrorResponse('Each image must have both public_id and url', 400));
+    }
+    if (req.body.images.some(img => img.public_id.length > 255 || img.url.length > 2048)) {
+      return next(new ErrorResponse('Image public_id or url too long', 400));
+    }
+  }
+
+  // Validate color if provided (2-30 characters)
+  if (req.body.color && (req.body.color.length < 2 || req.body.color.length > 30)) {
+    return next(new ErrorResponse('Color must be between 2 and 30 characters', 400));
+  }
+
+  // Create product
   const product = await Product.create(req.body);
 
   res.status(201).json({
@@ -810,5 +892,161 @@ exports.generateCategorySalesReportPdf = asyncHandler(async (req, res, next) => 
   } catch (error) {
     console.error("Error generating category sales PDF:", error);
     return next(new ErrorResponse('Error generating category sales report', 500));
+  }
+});
+
+// @desc    Bulk import products
+// @route   POST /api/v1/admin/products/import
+// @access  Private/Admin
+exports.importProducts = asyncHandler(async (req, res, next) => {
+  const { products } = req.body;
+
+  // Validate products array exists and has items
+  if (!Array.isArray(products) || products.length === 0) {
+    return next(new ErrorResponse('Please provide an array of products to import', 400));
+  }
+
+  // Limit the number of products that can be imported at once
+  if (products.length > 100) {
+    return next(new ErrorResponse('Maximum 100 products can be imported at once', 400));
+  }
+
+  const validCategories = ['shirts', 'pants', 'shoes', 'accessories', 't-shirt'];
+  const errors = [];
+  const productsToImport = [];
+  const productNames = new Set();
+
+  // Validate each product
+  for (let i = 0; i < products.length; i++) {
+    const product = products[i];
+    const errorPrefix = `Product ${i + 1}: `;
+    const productErrors = [];
+
+    // Required fields check
+    const requiredFields = ['name', 'description', 'price', 'category', 'stock', 'size'];
+    const missingFields = requiredFields.filter(field => !product[field]);
+    if (missingFields.length > 0) {
+      productErrors.push(`Missing required fields: ${missingFields.join(', ')}`);
+    }
+
+    // Name validation
+    if (product.name) {
+      if (product.name.length < 3 || product.name.length > 50) {
+        productErrors.push('Name must be between 3 and 50 characters');
+      }
+      if (productNames.has(product.name.toLowerCase())) {
+        productErrors.push('Duplicate product name in import batch');
+      } else {
+        productNames.add(product.name.toLowerCase());
+      }
+    }
+
+    // Description validation
+    if (product.description && (product.description.length < 10 || product.description.length > 200)) {
+      productErrors.push('Description must be between 10 and 200 characters');
+    }
+
+    // Category validation
+    if (product.category && !validCategories.includes(product.category.toLowerCase())) {
+      productErrors.push(`Invalid category. Valid categories are: ${validCategories.join(', ')}`);
+    }
+
+    // Stock validation
+    if (product.stock && (product.stock < 1 || product.stock > 100)) {
+      productErrors.push('Stock must be between 1 and 100');
+    }
+
+    // Price validation
+    if (product.price && (product.price <= 0 || product.price > 99999.99)) {
+      productErrors.push('Price must be between 0.01 and 99,999.99');
+    }
+
+    // Discount price validation
+    if (product.discountPrice) {
+      if (product.discountPrice <= 0) {
+        productErrors.push('Discount price must be greater than 0');
+      }
+      if (product.price && product.discountPrice >= product.price) {
+        productErrors.push('Discount price must be less than regular price');
+      }
+    }
+
+    // Size validation
+    if (product.size) {
+      if (!Array.isArray(product.size) || product.size.length === 0 || product.size.length > 10) {
+        productErrors.push('Please provide 1 to 10 sizes');
+      } else {
+        for (const s of product.size) {
+          if (typeof s !== 'string' || s.length < 1 || s.length > 10) {
+            productErrors.push('Each size must be 1 to 10 characters');
+            break;
+          }
+        }
+      }
+    }
+
+    // Images validation
+    if (product.images) {
+      if (!Array.isArray(product.images) || product.images.length === 0 || product.images.length > 8) {
+        productErrors.push('Please provide 1 to 8 images');
+      } else {
+        for (const img of product.images) {
+          if (!img.public_id || !img.url) {
+            productErrors.push('Each image must have both public_id and url');
+            break;
+          }
+          if (img.public_id.length > 255 || img.url.length > 2048) {
+            productErrors.push('Image public_id or url too long');
+            break;
+          }
+        }
+      }
+    }
+
+    // Color validation
+    if (product.color && (product.color.length < 2 || product.color.length > 30)) {
+      productErrors.push('Color must be between 2 and 30 characters');
+    }
+
+    if (productErrors.length > 0) {
+      errors.push({
+        product: product.name || `Product at index ${i}`,
+        errors: productErrors.map(err => errorPrefix + err)
+      });
+    } else {
+      productsToImport.push(product);
+    }
+  }
+
+  // Check for existing products in database
+  const existingProducts = await Product.find({
+    name: { $in: [...productNames].map(name => new RegExp(`^${name}$`, 'i')) }
+  });
+
+  if (existingProducts.length > 0) {
+    existingProducts.forEach(prod => {
+      errors.push({
+        product: prod.name,
+        errors: [`Product with name '${prod.name}' already exists in database`]
+      });
+    });
+  }
+
+  // If there are any errors, return them
+  if (errors.length > 0) {
+    return next(new ErrorResponse('Some products failed validation', 400, { errors }));
+  }
+
+  try {
+    // Insert all valid products
+    const insertedProducts = await Product.insertMany(productsToImport);
+    
+    res.status(201).json({
+      success: true,
+      count: insertedProducts.length,
+      data: insertedProducts
+    });
+  } catch (err) {
+    return next(new ErrorResponse('Failed to import products', 500));
   }
 });

@@ -61,7 +61,7 @@ exports.createProductReview = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Rating must be between 1 and 5', 400));
   }
 
-  if (!comment || comment.length > 250) {
+  if (!comment || comment.length < 2 ||comment.length > 250) {
     return next(new ErrorResponse('Comment must not exceed 250 characters', 400));
   }
 
@@ -357,3 +357,129 @@ function createComparisonMatrix(products) {
     products: productHeaders
   };
 }
+
+// @desc    Search products with filters and sorting
+// @route   GET /api/v1/products/search
+// @access  Public
+exports.searchProducts = asyncHandler(async (req, res, next) => {
+  const { keyword, category, minPrice, maxPrice, minRating, color, size, sortBy } = req.query;
+  
+  // Build the query object
+  const query = {};
+
+  // Keyword search (name or description)
+  if (keyword) {
+    query.$or = [
+      { name: { $regex: keyword, $options: 'i' } },
+      { description: { $regex: keyword, $options: 'i' } }
+    ];
+  }
+
+  // Category filter
+  if (category) {
+    query.category = { $regex: new RegExp(`^${category}$`, 'i') };
+  }
+
+  // Price range filter
+  if (minPrice || maxPrice) {
+    query.price = {};
+    if (minPrice) query.price.$gte = Number(minPrice);
+    if (maxPrice) query.price.$lte = Number(maxPrice);
+  }
+
+  // Rating filter
+  if (minRating) {
+    query.ratings = { $gte: Number(minRating) };
+  }
+
+  // Color filter
+  if (color) {
+    query.color = { $regex: new RegExp(color, 'i') };
+  }
+
+  // Size filter
+  if (size) {
+    query.size = { $in: [size.toUpperCase()] };
+  }
+
+  // Sorting logic
+  const sortOptions = {
+    'price-asc': 'price',
+    'price-desc': '-price',
+    'rating': '-ratings',
+    'newest': '-createdAt',
+    'popular': '-wishlistCount'
+  };
+
+  const sort = sortOptions[sortBy] || '-createdAt';
+
+  // Execute query with pagination and sorting
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 25;
+  const skip = (page - 1) * limit;
+
+  const products = await Product.find(query)
+    .sort(sort)
+    .skip(skip)
+    .limit(limit);
+    
+  const total = await Product.countDocuments(query);
+
+  res.status(200).json({
+    success: true,
+    count: products.length,
+    total,
+    page,
+    pages: Math.ceil(total / limit),
+    data: products
+  });
+});
+
+// @desc    Get available search filters
+// @route   GET /api/v1/products/search/filters
+// @access  Public
+exports.getSearchFilters = asyncHandler(async (req, res, next) => {
+  const filters = await Product.aggregate([
+    {
+      $facet: {
+        categories: [
+          { $group: { _id: '$category', count: { $sum: 1 } } },
+          { $sort: { _id: 1 } }
+        ],
+        colors: [
+          { $match: { color: { $exists: true, $ne: '' } } },
+          { $group: { _id: '$color', count: { $sum: 1 } } },
+          { $sort: { _id: 1 } }
+        ],
+        sizes: [
+          { $unwind: '$size' },
+          { $group: { _id: '$size', count: { $sum: 1 } } },
+          { $sort: { _id: 1 } }
+        ],
+        priceRange: [
+          { 
+            $group: { 
+              _id: null,
+              min: { $min: '$price' },
+              max: { $max: '$price' }
+            } 
+          }
+        ],
+        ratings: [
+          { 
+            $group: { 
+              _id: { $floor: '$ratings' },
+              count: { $sum: 1 }
+            } 
+          },
+          { $sort: { _id: 1 } }
+        ]
+      }
+    }
+  ]);
+
+  res.status(200).json({
+    success: true,
+    data: filters[0]
+  });
+});
