@@ -17,115 +17,180 @@ User-Agent Tracking: express-useragent
 Email:    admin@gmail.com  
 Password: Admin@123
 
-# 🔗 API Endpoints
-🔐 Auth
-POST /api/v1/auth/register – Register a user
+# 🔗 API Endpoints 
 
-POST /api/v1/auth/login – User login
+# 🔐 Authentication
 
-POST /api/v1/auth/admin/login – Admin login
+Method	    Endpoint	                 Description
 
-GET /api/v1/auth/me – Current user
+POST	     /api/v1/auth/register	     Register user
 
-GET /api/v1/auth/logout – Logout
+POST	     /api/v1/auth/login	         Login user
 
-👕 Products
-GET /api/v1/products – All products
+POST	     /api/v1/auth/admin/login	   Admin login
+ 
+GET   	   /api/v1/auth/me	           Get current user
 
-GET /api/v1/products/:id – Single product
+GET	       /api/v1/auth/logout	       Logout user
 
-POST /api/v1/products/:id/reviews – Add review
+# 🧍 Users
 
-GET /api/v1/products/:id/reviews – Get reviews
+Method	    Endpoint	                     Description
 
-DELETE /api/v1/reviews/:id – Delete review
+GET	        /api/v1/users/me	             Get user profile
 
-🛒 Cart
-GET /api/v1/cart – User cart
+PUT	        /api/v1/users/me	             Update user profile
 
-POST /api/v1/cart – Add to cart
+PUT       	/api/v1/users/updatepassword	 Change password
 
-PUT /api/v1/cart/:itemId – Update cart item
+DELETE	    /api/v1/users/me	             Delete user account
 
-DELETE /api/v1/cart/:itemId – Remove item
+# 🧕 Addresses
 
-DELETE /api/v1/cart – Clear cart
+Method	    Endpoint	                        Description
 
-📦 Orders
-POST /api/v1/orders – Place order
+GET	        /api/v1/addresses	                Get all addresses
 
-GET /api/v1/orders/myorders – My orders
+GET	        /api/v1/addresses/count	          Get address count
 
-GET /api/v1/orders/:id – Single order
+POST	      /api/v1/addresses	                Add address
 
-DELETE /api/v1/orders/:id – Cancel order
+PUT       	/api/v1/addresses/:id	            Update address
 
-GET /api/v1/orders/:id/pdf – PDF receipt
+PUT	        /api/v1/addresses/:id/set-default	Set default address
 
-PUT /api/v1/orders/:id/deliver – Mark as delivered (admin)
+DELETE    	/api/v1/addresses/:id	            Delete address
 
-❤️ Wishlist
-GET /api/v1/wishlist – View wishlist
+# 👕 Products
 
-POST /api/v1/wishlist – Add to wishlist
+Method	   Endpoint	                                      Description
 
-DELETE /api/v1/wishlist/:itemId – Remove from wishlist
+GET	       /api/v1/products	                              List all products
 
-POST /api/v1/wishlist/:itemId/move-to-cart – Move to cart
+GET	       /api/v1/products/:id	                          Get single product
 
-👤 Users
-GET /api/v1/users/me – Get profile
+GET	       /api/v1/products/search	                      Search products
 
-PUT /api/v1/users/me – Update profile
+GET	       /api/v1/products/search/filters	              Filtered product search
 
-PUT /api/v1/users/updatepassword – Change password
+POST      /api/v1/products/:id/reviews	                  Add review
 
-DELETE /api/v1/users/me – Delete account
+GET	       /api/v1/products/:id/reviews	                  Get product reviews
 
-# 🛠 Admin Functionalities
+PUT	       /api/v1/products/:productId/reviews/:reviewId	Update review
 
-👥 Users Management
-GET /api/v1/admin/users – All users
+DELETE     /api/v1/products/:productId/reviews/:reviewId	Delete review
 
-GET /api/v1/admin/users/:id – Single user
+POST	     /api/v1/products/compare	                      Compare two products
 
-POST /api/v1/admin/users – Create user
 
-PUT /api/v1/admin/users/:id – Update user
+# 🛒 Cart
 
-DELETE /api/v1/admin/users/:id – Delete user
+Method	 Endpoint	             Description 
 
-GET /api/v1/admin/users-list/pdf – PDF user list
+GET	     /api/v1/cart	         Get user cart
 
-🧢 Product Management
-GET /api/v1/admin/products – All products
+POST	   /api/v1/cart	         Add to cart
 
-POST /api/v1/admin/products – Create product
+PUT	     /api/v1/cart/:itemId  Update cart item
 
-PUT /api/v1/admin/products/:id – Update product
+DELETE	 /api/v1/cart/:itemId	 Remove cart item
 
-DELETE /api/v1/admin/products/:id – Delete product
+DELETE	 /api/v1/cart	         Clear cart
 
-GET /api/v1/admin/products-list/pdf – PDF product list
+# ❤️ Wishlist
 
-📋 Orders Management
-GET /api/v1/admin/orders – All orders
+Method	Endpoint	                            Description
 
-GET /api/v1/admin/orders/:id – Single order
+GET	    /api/v1/wishlist	                    Get wishlist
 
-PUT /api/v1/admin/orders/:id – Update order
+POST	  /api/v1/wishlist	                    Add to wishlist
 
-DELETE /api/v1/admin/orders/:id – Delete order
+DELETE	/api/v1/wishlist/:itemId	            Remove from wishlist
 
-GET /api/v1/admin/orders-list/pdf – PDF order list
+POST   	/api/v1/wishlist/:itemId/move-to-cart	Move item to cart
 
-GET /api/v1/admin/sales-report/pdf – Sales report in PDF
 
-📊 Dashboard
-GET /api/v1/admin/dashboard-stats – Dashboard stats
+# 📦 Orders
 
-📦 Project Setup
+Method	Endpoint	                       Description
+
+POST	  /api/v1/orders	                 Create order
+ 
+GET	    /api/v1/orders/myorders        	 User orders
+
+GET   	/api/v1/orders/:id	             Get single order
+
+DELETE	/api/v1/orders/:id	             Cancel order
+
+PUT	    /api/v1/orders/:id/deliver	     Mark as delivered (admin)
+
+GET	    /api/v1/orders/:id/pdf	         Get PDF invoice
+
+GET   	/api/v1/orders/:id/tracking	     Track order
+
+POST	  /api/v1/orders/webhook/shipping	 Shipping webhook
+
+# 🛠 Admin Routes
+
+# 👥 Users
+Method	Endpoint	                    Description
+
+GET	    /api/v1/admin/users	          Get all users
+
+GET	    /api/v1/admin/users/:id	      Get user details
+
+POST  	/api/v1/admin/users	          Create new user
+
+PUT	    /api/v1/admin/users/:id       Update user
+
+DELETE	/api/v1/admin/users/:id	      Delete user
+
+GET   	/api/v1/admin/users-list/pdf	Export users to PDF
+
+# 🛍 Products
+
+Method	Endpoint	                                         Description
+
+GET   	/api/v1/admin/products	                           Admin: all products
+
+POST	  /api/v1/admin/products	                           Add new product
+
+PUT	    /api/v1/admin/products/:id	                       Update product
+
+DELETE	/api/v1/admin/products/:id	                       Delete product
+
+DELETE	/api/v1/admin/products/:productId/reviews/:reviewId	 Delete review
+
+GET   	/api/v1/admin/products-list/pdf	                  Export product list PDF
+
+# 📋 Orders
+
+Method	Endpoint	                              Description
+
+GET   	/api/v1/admin/orders	                  Admin: all orders
+
+GET	    /api/v1/admin/orders/:id              	Get single order
+
+PUT   	/api/v1/admin/orders/:id               	Update order
+
+DELETE	/api/v1/admin/orders/:id              	Delete order
+
+GET	    /api/v1/admin/orders-list/pdf           Export order list to PDF
+
+GET	    /api/v1/admin/sales-report/pdf	        Get total sales report
+
+GET	    /api/v1/admin/sales-report/category/pdf	Sales by category PDF
+
+# 📊 Dashboard
+
+Method	Endpoint	                      Description 
+
+GET	    /api/v1/admin/dashboard-stats	  Get dashboard stats
+
+# 📦 Project Setup
 Prerequisites
+
 Node.js and npm
 
 MongoDB instance (local or Atlas)
@@ -133,25 +198,16 @@ MongoDB instance (local or Atlas)
 .env file with environment variables (e.g., DB URI, JWT secret, email credentials)
 
 Installation
-bash
-Copy
-Edit
-git clone https://github.com/your-username/dressup.git
-cd dressup
+
+git clone https://github.com/Biniljacobpro/ecommerce-boys-clothing.git
+
 npm install
-Run Server
-bash
-Copy
-Edit
+
 npm run dev
 
 # 📁 Dependencies
 Key dependencies used in the project:
 
-json
-Copy
-Edit
-{
   "express": "^4.18.2",
   "mongoose": "^8.13.2",
   "jsonwebtoken": "^9.0.2",
@@ -163,16 +219,21 @@ Edit
   "helmet": "^8.1.0",
   "cors": "^2.8.5",
   "dotenv": "^16.4.7"
-}
-✨ Features Summary
-🔒 Secure user authentication with JWT
 
-🛍 Product browsing, reviews, cart, wishlist
+# 📸 Features Overview
+*
+✅ JWT Authentication
+✅ Full User Management
+✅ Admin Panel with Dashboard
+✅ Product Listing, Review, and Comparison
+✅ Cart & Wishlist
+✅ Address Management
+✅ Orders with PDF Invoice
+✅ Email Notification System
+✅ Sales Report with Charts in PDF*
 
-📦 Full order lifecycle: create, cancel, deliver, receipt
 
-📄 PDF generation for receipts, user lists, product lists, orders, and sales reports
-
-📊 Admin dashboard with stats and reports
-
-📧 Email notifications via Nodemailer
+# 👨‍💻 Developer
+Name    : Binil Jacob
+Email   : biniljacob274@gmail.com
+GitHub  : github.com/Biniljacobpro
