@@ -21,8 +21,6 @@ Password: Admin@123
 
 # 🔐 Authentication
 
-Method	    Endpoint	                 Description
-
 POST	     /api/v1/auth/register	     Register user
 
 POST	     /api/v1/auth/login	         Login user
@@ -221,7 +219,7 @@ Key dependencies used in the project:
   "dotenv": "^16.4.7"
 
 # 📸 Features Overview
-*
+
 ✅ JWT Authentication
 ✅ Full User Management
 ✅ Admin Panel with Dashboard
